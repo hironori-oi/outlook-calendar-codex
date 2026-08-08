@@ -1,0 +1,23 @@
+{
+  "name": "nagi-calendar",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A lightweight Microsoft 365 calendar workspace for Windows.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "desktop:dev": "cargo tauri dev",
+    "desktop:build": "cargo tauri build",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-sql": "^2.4.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "vite": "^7.3.6"
+  }
+}

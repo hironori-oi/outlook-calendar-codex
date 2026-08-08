@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e8edf1">
+  <title>NAGI — Calendar workspace mock</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v12H4V7a2 2 0 0 1 2-2Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.8 19c.5-4 2.1-6 5.2-6s4.7 2 5.2 6M16 5.5a3 3 0 0 1 0 5.8M16 13c2.7.2 4.1 2.1 4.5 5"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m4.5 12 7.5 4 7.5-4M4.5 16l7.5 4 7.5-4"/></symbol>
+    <symbol id="i-room" viewBox="0 0 24 24"><path d="M5 21V4l12-1v18M3 21h18M13 12h.01"/><path d="M17 7h3v14"/></symbol>
+    <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.3 6.4L4 11M5.5 15A7 7 0 0 0 17.7 17.6L20 13"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V10a6 6 0 0 1 12 0v6l2 2H4l2-2Z"/><path d="M10 21h4"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></symbol>
+    <symbol id="i-building" viewBox="0 0 24 24"><path d="M4 21V5l8-2v18M12 8h8v13M8 8h.01M8 12h.01M8 16h.01M16 12h.01M16 16h.01M2 21h20"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10L4 20Z"/><path d="m13.5 7 3.5 3.5"/></symbol>
+  </svg>
+
+  <div id="background-layer" aria-hidden="true"></div>
+  <div class="app-frame" id="app-frame">
+    <header class="titlebar" data-tauri-drag-region>
+      <div class="titlebar-brand" data-tauri-drag-region>
+        <span class="brand-mark brand-mark--tiny"><i></i><i></i></span>
+        <span>NAGI</span>
+        <span class="mock-badge" id="runtime-badge">STARTING</span>
+      </div>
+      <button class="connection-state" id="connection-state" type="button">
+        <span class="status-dot"></span>
+        <span id="connection-label">ローカルデータを準備中</span>
+      </button>
+      <div class="window-controls" aria-label="ウィンドウ操作">
+        <button type="button" aria-label="最小化" data-window-action="minimize"><span></span></button>
+        <button type="button" aria-label="最大化または元に戻す" data-window-action="toggle-maximize"><span class="maximize-box"></span></button>
+        <button type="button" aria-label="閉じる" data-window-action="close"><svg><use href="#i-close"/></svg></button>
+      </div>
+    </header>
+
+    <div class="app-layout">
+      <nav class="rail" aria-label="メインナビゲーション">
+        <div class="brand-mark" aria-label="NAGI"><i></i><i></i></div>
+        <div class="rail-primary">
+          <button class="rail-button active" type="button" aria-label="カレンダー" data-nav="calendar"><svg><use href="#i-calendar"/></svg><span>予定</span></button>
+          <button class="rail-button" type="button" aria-label="メンバー" data-open-directory="people"><svg><use href="#i-users"/></svg><span>人</span></button>
+          <button class="rail-button" type="button" aria-label="表示セット"><svg><use href="#i-layers"/></svg><span>セット</span></button>
+          <button class="rail-button" type="button" aria-label="会議室" data-open-directory="rooms"><svg><use href="#i-room"/></svg><span>部屋</span></button>
+          <button class="rail-button" id="open-sync" type="button" aria-label="データ更新"><svg><use href="#i-database"/></svg><span>更新</span></button>
+        </div>
+        <div class="rail-secondary">
+          <button class="rail-button" id="open-appearance" type="button" aria-label="背景と外観"><svg><use href="#i-image"/></svg><span>背景</span></button>
+          <button class="profile-button" type="button" aria-label="アカウント"><span>加</span><i></i></button>
+        </div>
+      </nav>
+
+      <aside class="collection-pane" aria-label="表示セット">
+        <div class="pane-heading">
+          <div>
+            <p class="eyebrow">WORKSPACE</p>
+            <h1>予定を重ねる</h1>
+          </div>
+          <button class="icon-button" id="new-display-set" type="button" aria-label="新しい表示セット"><svg><use href="#i-plus"/></svg></button>
+        </div>
+
+        <button class="search-launch" type="button" data-open-directory="people">
+          <svg><use href="#i-search"/></svg>
+          <span>人・所属を検索</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+
+        <section class="pane-section">
+          <div class="section-heading">
+            <span>表示セット</span>
+            <button type="button" aria-label="表示セットのメニュー"><svg><use href="#i-more"/></svg></button>
+          </div>
+          <div class="space-list" id="space-list">
+            <button class="space-row active" type="button" data-space="product">
+              <span class="space-swatch cobalt"></span>
+              <span class="space-copy"><strong>プロダクト定例</strong><small>4人・1部屋</small></span>
+              <span class="space-key">1</span>
+            </button>
+            <button class="space-row" type="button" data-space="hiring">
+              <span class="space-swatch coral"></span>
+              <span class="space-copy"><strong>採用面談</strong><small>3人・2部屋</small></span>
+              <span class="space-key">2</span>
+            </button>
+            <button class="space-row" type="button" data-space="sales">
+              <span class="space-swatch mint"></span>
+              <span class="space-copy"><strong>営業本部</strong><small>8人・空き状況</small></span>
+              <span class="space-key">3</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="pane-section resources-section">
+          <div class="resource-tabs" role="tablist" aria-label="登録リソース">
+            <button class="active" type="button" role="tab" aria-selected="true" data-resource-tab="people">メンバー <span>4</span></button>
+            <button type="button" role="tab" aria-selected="false" data-resource-tab="rooms">会議室 <span>1</span></button>
+          </div>
+          <div class="resource-list" id="people-resource-list">
+            <button class="resource-person" type="button" data-person="me"><span class="avatar avatar-navy">加</span><span><strong>加藤 浩</strong><small>自分の予定</small></span><i class="presence online"></i></button>
+            <button class="resource-person" type="button" data-person="sato"><span class="avatar avatar-blue">佐</span><span><strong>佐藤 美咲</strong><small>プロダクト企画</small></span><i class="presence busy"></i></button>
+            <button class="resource-person" type="button" data-person="suzuki"><span class="avatar avatar-gold">鈴</span><span><strong>鈴木 健太</strong><small>UXデザイン</small></span><i class="presence online"></i></button>
+            <button class="resource-person" type="button" data-person="chen"><span class="avatar avatar-green">陳</span><span><strong>陳 リン</strong><small>開発1グループ</small></span><i class="presence away"></i></button>
+          </div>
+          <div class="resource-list hidden" id="room-resource-list">
+            <button class="room-row selected" type="button"><span class="room-icon"><svg><use href="#i-room"/></svg></span><span><strong>HIKARI 12F</strong><small>8名・Teams対応</small></span><i class="presence online"></i></button>
+            <button class="add-resource" type="button" data-open-directory="rooms"><svg><use href="#i-plus"/></svg> 会議室を追加</button>
+          </div>
+        </section>
+
+        <div class="directory-status">
+          <div class="status-topline"><span><i></i> 社員名簿</span><strong data-directory-count data-count-suffix="件">—件</strong></div>
+          <p data-directory-updated>最終更新　準備中</p>
+          <button id="sidebar-sync" type="button"><svg><use href="#i-refresh"/></svg><span>今すぐ更新</span></button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="workspace-header">
+          <div class="date-navigation">
+            <button class="today-button" id="today-button" type="button">今日</button>
+            <div class="step-buttons">
+              <button type="button" aria-label="前へ" data-date-step="-1"><svg><use href="#i-chevron-left"/></svg></button>
+              <button type="button" aria-label="次へ" data-date-step="1"><svg><use href="#i-chevron-right"/></svg></button>
+            </div>
+            <div class="date-title">
+              <h2 id="date-title">8月10日 — 14日</h2>
+              <p>2026年・第33週</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <div class="view-switcher" role="group" aria-label="表示粒度">
+              <button type="button" data-view="day">日</button>
+              <button class="active" type="button" data-view="week">週</button>
+              <button type="button" data-view="month">月</button>
+            </div>
+            <button class="header-icon" type="button" aria-label="通知"><svg><use href="#i-bell"/></svg><i></i></button>
+            <button class="create-button" id="create-event" type="button"><svg><use href="#i-plus"/></svg>予定を作成 <kbd>N</kbd></button>
+          </div>
+        </header>
+
+        <section class="availability-lens" aria-labelledby="lens-title">
+          <div class="lens-intro">
+            <div class="lens-mark"><svg><use href="#i-spark"/></svg></div>
+            <div><p>空き時間レンズ</p><h3 id="lens-title">全員と部屋が空く時間</h3></div>
+          </div>
+          <div class="lens-slots" id="lens-slots">
+            <button type="button" data-slot-day="0" data-slot-start="10.5"><span>月</span><strong>10:30–11:00</strong><small>30分</small></button>
+            <button class="recommended" type="button" data-slot-day="1" data-slot-start="15"><span>火</span><strong>15:00–16:00</strong><small>最適</small></button>
+            <button type="button" data-slot-day="3" data-slot-start="13"><span>木</span><strong>13:00–14:00</strong><small>60分</small></button>
+          </div>
+          <button class="lens-more" type="button">候補を比較 <svg><use href="#i-chevron-right"/></svg></button>
+        </section>
+
+        <div class="selection-bar">
+          <div class="selection-summary">
+            <span class="stacked-avatars"><i class="avatar avatar-navy">加</i><i class="avatar avatar-blue">佐</i><i class="avatar avatar-gold">鈴</i><i class="avatar avatar-green">陳</i></span>
+            <span><strong id="selection-title">プロダクト定例</strong>を表示中</span>
+            <span class="room-pill"><svg><use href="#i-room"/></svg> HIKARI 12F</span>
+          </div>
+          <div class="calendar-legend">
+            <span><i class="legend-dot mine"></i>自分</span>
+            <span><i class="legend-dot shared"></i>共有予定</span>
+            <span><i class="legend-dot private"></i>予定あり</span>
+            <button type="button" aria-label="表示設定"><svg><use href="#i-filter"/></svg>表示</button>
+          </div>
+        </div>
+
+        <section class="calendar-surface" id="calendar-surface" aria-label="カレンダー">
+          <div id="calendar-view" class="calendar-view"></div>
+        </section>
+
+        <div class="workspace-freshness"><span><i></i>予定表を10:06に取得</span><span>表示範囲のみキャッシュ</span></div>
+
+        <aside class="side-drawer event-drawer" id="event-drawer" aria-hidden="true" aria-label="予定の詳細" inert>
+          <div class="drawer-header">
+            <div><p class="eyebrow" id="drawer-eyebrow">NEW EVENT</p><h2 id="drawer-title">予定を作成</h2></div>
+            <button class="icon-button drawer-close" type="button" aria-label="閉じる"><svg><use href="#i-close"/></svg></button>
+          </div>
+          <form id="event-form">
+            <label class="field title-field"><span>件名</span><input id="event-title-input" type="text" value="プロジェクトレビュー" autocomplete="off"></label>
+            <div class="field-row">
+              <label class="field"><span>日付</span><input id="event-date" type="date" value="2026-08-11"></label>
+              <label class="field"><span>開始</span><input id="event-time" type="time" value="15:00" min="08:00" max="19:30" step="900"></label>
+              <label class="field field-small"><span>時間</span><select id="event-duration"><option value="30">30分</option><option value="60" selected>60分</option><option value="90">90分</option></select></label>
+            </div>
+            <div class="drawer-section">
+              <div class="drawer-section-title"><span>参加者</span><button type="button" data-open-directory="people">＋ 追加</button></div>
+              <div class="attendee-list" id="composer-attendees"></div>
+              <div class="availability-confirm" id="composer-availability"><svg><use href="#i-check"/></svg><span><strong>全員が空いています</strong><small>勤務時間・予定ありを確認済み</small></span></div>
+            </div>
+            <div class="drawer-section">
+              <div class="drawer-section-title"><span>会議室</span><button type="button" data-open-directory="rooms">変更</button></div>
+              <button class="recommended-room" id="composer-room" type="button"></button>
+            </div>
+            <label class="teams-toggle"><span class="toggle on"><i></i></span><span><strong>Teams会議</strong><small>参加リンクを自動で追加</small></span></label>
+            <label class="field notes-field"><span>メモ</span><textarea id="event-notes" placeholder="議題や共有事項を入力"></textarea></label>
+            <div class="drawer-footer"><button class="secondary-button draft-button" type="button" disabled>下書きに保存</button><button class="primary-button" id="event-submit" type="submit" disabled>ローカルに保存</button></div>
+          </form>
+        </aside>
+
+        <aside class="side-drawer detail-drawer" id="detail-drawer" aria-hidden="true" aria-label="予定の詳細" inert>
+          <div class="drawer-header">
+            <div><p class="eyebrow">EVENT</p><h2 id="detail-title">企画レビュー</h2></div>
+            <button class="icon-button drawer-close" type="button" aria-label="閉じる"><svg><use href="#i-close"/></svg></button>
+          </div>
+          <div class="detail-content">
+            <div class="detail-time"><span class="detail-date" id="detail-date">11</span><span><strong id="detail-day">8月11日（火）</strong><small id="detail-time">13:00–14:00</small></span></div>
+            <div class="detail-meta"><p><svg><use href="#i-users"/></svg><span id="detail-owner">佐藤 美咲 + 3人</span></p><p><svg><use href="#i-room"/></svg><span id="detail-room">HIKARI 12F</span></p><p><svg><use href="#i-video"/></svg><span id="detail-online">Teams会議</span></p></div>
+            <div class="detail-note"><span>メモ</span><p id="detail-note">メモはありません。</p></div>
+            <div class="privacy-note"><svg><use href="#i-lock"/></svg><span><strong>共有された詳細</strong><small>閲覧権限に応じた情報のみ表示しています</small></span></div>
+            <div class="detail-actions"><button class="secondary-button" id="detail-edit" type="button"><svg><use href="#i-edit"/></svg>複製して編集</button><button class="primary-button" id="detail-join" type="button" disabled title="Graph接続後に有効になります"><svg><use href="#i-video"/></svg>Graph接続後</button></div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+  <div class="command-overlay" id="directory-overlay" aria-hidden="true" inert>
+    <section class="command-palette" role="dialog" aria-modal="true" aria-label="社員・会議室を検索">
+      <div class="directory-search-row">
+        <svg><use href="#i-search"/></svg>
+        <input id="directory-search" type="search" placeholder="名前、よみ、メール、所属で検索" autocomplete="off" aria-label="社員・会議室を検索">
+        <kbd>ESC</kbd>
+      </div>
+      <div class="directory-toolbar">
+        <div class="directory-tabs" role="tablist"><button class="active" type="button" data-directory-mode="people">メンバー</button><button type="button" data-directory-mode="rooms">会議室</button></div>
+        <div class="index-state"><span><i></i>ローカル索引</span><span data-directory-count data-count-suffix="件">—件</span><span data-directory-updated>準備中</span></div>
+      </div>
+      <div class="filter-chips" id="people-filters"><button class="active" type="button" data-directory-filter="all">すべて</button><button type="button" data-directory-filter="product">プロダクト本部</button><button type="button" data-directory-filter="tokyo">東京</button><button type="button" data-directory-filter="recent">登録中</button><button class="filter-open" type="button" disabled title="詳細フィルターは次のMVPで追加します"><svg><use href="#i-filter"/></svg>絞り込み</button></div>
+      <div class="filter-chips hidden" id="room-filters"><button class="active" type="button" data-directory-filter="available">空室のみ</button><button type="button" data-directory-filter="tokyo">東京本社</button><button type="button" data-directory-filter="capacity">8名以上</button><button type="button" data-directory-filter="teams">Teams対応</button><button class="filter-open" type="button" disabled title="詳細設備フィルターは次のMVPで追加します"><svg><use href="#i-filter"/></svg>設備</button></div>
+      <div class="result-label"><span id="result-heading">おすすめ・最近使った人</span><span id="result-count">0.02秒</span></div>
+      <div class="directory-results" id="directory-results"></div>
+      <div class="directory-footer">
+        <span><kbd>↑</kbd><kbd>↓</kbd> 選択　<kbd>Space</kbd> 追加　<kbd>Enter</kbd> 表示</span>
+        <button class="primary-button" id="close-directory" type="button">表示セットを更新</button>
+      </div>
+    </section>
+  </div>
+
+  <aside class="appearance-panel" id="appearance-panel" aria-hidden="true" inert>
+    <div class="drawer-header"><div><p class="eyebrow">APPEARANCE</p><h2>背景と見やすさ</h2></div><button class="icon-button" id="close-appearance" type="button" aria-label="閉じる"><svg><use href="#i-close"/></svg></button></div>
+    <div class="appearance-preview"><div><span>NAGI</span><i></i></div></div>
+    <section><h3>背景</h3><div class="background-options"><button class="bg-option city active" type="button" data-background="city" aria-label="都市の朝"></button><button class="bg-option mist" type="button" data-background="mist" aria-label="ミスト"></button><button class="bg-option dusk" type="button" data-background="dusk" aria-label="夕暮れ"></button><label class="bg-option upload" aria-label="画像を選択"><input id="background-upload" type="file" accept="image/png,image/jpeg,image/webp"><svg><use href="#i-plus"/></svg><span>画像</span></label></div></section>
+    <section><div class="setting-title"><h3>背景の見え方</h3><output id="background-output">28%</output></div><input id="background-range" type="range" min="0" max="65" value="28" aria-label="背景の見え方"></section>
+    <section><div class="setting-title"><h3>パネルの透過</h3><output id="panel-output">12%</output></div><input id="panel-range" type="range" min="0" max="28" value="12" aria-label="パネルの透過"><p>文字の読みやすさを保つ範囲で調整します。</p></section>
+    <section><h3>プリセット</h3><div class="preset-grid"><button type="button" data-preset="clear"><i class="preset-clear"></i><span><strong>クリア</strong><small>背景を楽しむ</small></span></button><button class="active" type="button" data-preset="mist"><i class="preset-mist"></i><span><strong>ミスト</strong><small>バランス</small></span></button><button type="button" data-preset="focus"><i class="preset-focus"></i><span><strong>集中</strong><small>情報を優先</small></span></button></div></section>
+    <label class="auto-readability"><span><strong>自動可読性補正</strong><small>背景に合わせてパネルを調整</small></span><span class="toggle on" id="readability-toggle"><i></i></span></label>
+  </aside>
+
+  <div class="sync-modal" id="sync-modal" aria-hidden="true" inert>
+    <section role="dialog" aria-modal="true" aria-labelledby="sync-title">
+      <div class="drawer-header"><div><p class="eyebrow">DIRECTORY DATA</p><h2 id="sync-title">社員名簿の更新</h2></div><button class="icon-button" id="close-sync" type="button" aria-label="閉じる"><svg><use href="#i-close"/></svg></button></div>
+      <div class="sync-hero"><span class="sync-orbit"><svg><use href="#i-database"/></svg></span><div><strong data-directory-count>—</strong><span>件を検索できます</span></div><i class="healthy-pill" id="sync-health">準備中</i></div>
+      <div class="sync-facts"><div><span>最終成功</span><strong data-directory-updated>準備中</strong></div><div><span>取得元</span><strong id="sync-source">ローカルデモデータ</strong></div><div><span>検索索引</span><strong id="sync-index-status">構築中</strong></div></div>
+      <div class="sync-delta"><h3>前回の変更</h3><p><span class="delta-add" id="sync-added">+0 追加</span><span id="sync-updated">0 更新</span><span class="delta-remove" id="sync-disabled">0 無効</span></p></div>
+      <p class="sync-note">更新中も検索とカレンダーはそのまま使えます。失敗した場合は、最後に成功したデータを維持します。</p>
+      <div class="sync-actions"><button class="secondary-button" id="sync-settings" type="button">更新設定</button><button class="primary-button" id="run-sync" type="button" disabled><svg><use href="#i-refresh"/></svg>今すぐ更新</button></div>
+    </section>
+  </div>
+
+  <div class="sync-modal" id="display-set-modal" aria-hidden="true" inert>
+    <section role="dialog" aria-modal="true" aria-labelledby="display-set-title">
+      <div class="drawer-header"><div><p class="eyebrow">NEW VIEW SET</p><h2 id="display-set-title">表示セットを作成</h2></div><button class="icon-button" id="close-display-set" type="button" aria-label="閉じる"><svg><use href="#i-close"/></svg></button></div>
+      <form id="display-set-form" class="display-set-form">
+        <label class="field"><span>表示セット名</span><input id="display-set-name" type="text" value="新しい表示セット" autocomplete="off"></label>
+        <div class="set-source"><span class="stacked-avatars" id="new-set-avatars"></span><span><strong id="new-set-source-name">プロダクト定例</strong><small>現在のメンバーと会議室を複製します</small></span></div>
+        <p>作成後に社員検索と会議室検索から、表示対象を追加・削除できます。</p>
+        <div class="sync-actions"><button class="secondary-button" id="cancel-display-set" type="button">キャンセル</button><button class="primary-button" type="submit">作成して表示</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
