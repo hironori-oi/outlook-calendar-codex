@@ -95,10 +95,13 @@ function normalizeRoom(value = {}, fallbackId) {
 }
 
 function normalizeViewSet(value = {}, fallbackId) {
+  const people = normalizeResourceIds(value.people);
+  const hiddenPeople = new Set(normalizeResourceIds(value.hiddenPeople));
   return {
     id: ensureId(value.id ?? fallbackId, "view"),
     name: text(value.name, "新しい表示セット"),
-    people: normalizeResourceIds(value.people),
+    people,
+    hiddenPeople: people.filter((personId) => hiddenPeople.has(personId)),
     rooms: normalizeResourceIds(value.rooms),
     lens: text(value.lens, "共通の空き時間"),
     availability: text(value.availability, "all"),
@@ -270,33 +273,17 @@ async function upsertSqliteRoom(platform, room) {
 }
 
 async function upsertSqliteViewSet(platform, viewSet) {
-  await platform.execute(
-    `INSERT INTO view_sets (
-      id, name, lens, availability, accent, slots_json, position, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      lens = excluded.lens,
-      availability = excluded.availability,
-      accent = excluded.accent,
-      slots_json = excluded.slots_json,
-      updated_at = CURRENT_TIMESTAMP`,
-    [viewSet.id, viewSet.name, viewSet.lens, viewSet.availability, viewSet.accent, JSON.stringify(viewSet.slots)],
-  );
-  await platform.execute("DELETE FROM view_set_people WHERE view_set_id = ?", [viewSet.id]);
-  await platform.execute("DELETE FROM view_set_rooms WHERE view_set_id = ?", [viewSet.id]);
-  for (const [position, personId] of viewSet.people.entries()) {
-    await platform.execute(
-      "INSERT INTO view_set_people (view_set_id, person_id, position) VALUES (?, ?, ?)",
-      [viewSet.id, personId, position],
-    );
-  }
-  for (const [position, roomId] of viewSet.rooms.entries()) {
-    await platform.execute(
-      "INSERT INTO view_set_rooms (view_set_id, room_id, position) VALUES (?, ?, ?)",
-      [viewSet.id, roomId, position],
-    );
-  }
+  const hiddenPeople = new Set(viewSet.hiddenPeople);
+  await platform.saveViewSetAtomic({
+    id: viewSet.id,
+    name: viewSet.name,
+    lens: viewSet.lens,
+    availability: viewSet.availability,
+    accent: viewSet.accent,
+    slotsJson: JSON.stringify(viewSet.slots),
+    people: viewSet.people.map((id) => ({ id, visible: !hiddenPeople.has(id) })),
+    rooms: viewSet.rooms,
+  });
 }
 
 async function upsertSqliteEvent(platform, event) {
@@ -460,7 +447,7 @@ async function loadSqliteSnapshot(platform, fixtures) {
     platform.select(`${ROOM_SELECT} ORDER BY name, id`, []),
     platform.select(`SELECT id, name, lens, availability, accent, slots_json AS slots
       FROM view_sets ORDER BY position, name`, []),
-    platform.select("SELECT view_set_id AS viewSetId, person_id AS personId FROM view_set_people ORDER BY position", []),
+    platform.select("SELECT view_set_id AS viewSetId, person_id AS personId, is_visible AS isVisible FROM view_set_people ORDER BY position", []),
     platform.select("SELECT view_set_id AS viewSetId, room_id AS roomId FROM view_set_rooms ORDER BY position", []),
     platform.select(`SELECT
       id, view_set_id AS space, event_date AS dateKey,
@@ -486,6 +473,7 @@ async function loadSqliteSnapshot(platform, fixtures) {
     spaces[row.id] = {
       name: row.name,
       people: [],
+      hiddenPeople: [],
       rooms: [],
       lens: row.lens,
       availability: row.availability,
@@ -494,7 +482,10 @@ async function loadSqliteSnapshot(platform, fixtures) {
     };
   }
   for (const row of setPeopleRows) {
-    if (spaces[row.viewSetId]) spaces[row.viewSetId].people.push(String(row.personId));
+    if (!spaces[row.viewSetId]) continue;
+    const personId = String(row.personId);
+    spaces[row.viewSetId].people.push(personId);
+    if (Number(row.isVisible) === 0) spaces[row.viewSetId].hiddenPeople.push(personId);
   }
   for (const row of setRoomRows) {
     if (spaces[row.viewSetId]) spaces[row.viewSetId].rooms.push(String(row.roomId));
@@ -532,7 +523,7 @@ function loadBrowserSnapshot(platform) {
   const state = normalizeBrowserState(platform.read(emptyBrowserState));
   const spaces = {};
   Object.entries(state.spaces).forEach(([id, viewSet]) => {
-    const { id: _id, ...publicViewSet } = viewSet;
+    const { id: _id, ...publicViewSet } = normalizeViewSet(viewSet, id);
     spaces[id] = clone(publicViewSet);
   });
   return {
@@ -605,6 +596,22 @@ async function saveBrowserViewSet(platform, viewSet) {
     return state;
   }, emptyBrowserState);
   return clone(viewSet);
+}
+
+async function setBrowserViewSetPersonVisibility(platform, viewSetId, personId, visible) {
+  await platform.update((stored) => {
+    const state = normalizeBrowserState(stored);
+    const viewSet = normalizeViewSet(state.spaces[viewSetId], viewSetId);
+    if (!(viewSetId in state.spaces)) throw new TypeError(`Unknown display set: ${viewSetId}`);
+    if (!viewSet.people.includes(personId)) throw new TypeError(`Unknown display-set member: ${personId}`);
+    const hiddenPeople = new Set(viewSet.hiddenPeople);
+    if (visible) hiddenPeople.delete(personId);
+    else hiddenPeople.add(personId);
+    viewSet.hiddenPeople = viewSet.people.filter((id) => hiddenPeople.has(id));
+    state.spaces[viewSetId] = viewSet;
+    return state;
+  }, emptyBrowserState);
+  return { viewSetId, personId, visible };
 }
 
 async function saveBrowserEvent(platform, event) {
@@ -756,6 +763,26 @@ export function createAppRepository(seed = {}, options = {}) {
         return clone(viewSet);
       }
       return saveBrowserViewSet(adapter, viewSet);
+    },
+
+    async setViewSetPersonVisibility(viewSetId, personId, visible) {
+      const normalizedViewSetId = text(viewSetId);
+      const normalizedPersonId = text(personId);
+      if (!normalizedViewSetId || !normalizedPersonId) throw new TypeError("Display set and person IDs are required");
+      const adapter = await ready();
+      if (adapter.kind === "sqlite") {
+        const result = await adapter.execute(
+          `UPDATE view_set_people
+           SET is_visible = ?
+           WHERE view_set_id = ? AND person_id = ?`,
+          [visible ? 1 : 0, normalizedViewSetId, normalizedPersonId],
+        );
+        if (Number(result?.rowsAffected ?? 0) < 1) {
+          throw new TypeError(`Unknown display-set member: ${normalizedPersonId}`);
+        }
+        return { viewSetId: normalizedViewSetId, personId: normalizedPersonId, visible: Boolean(visible) };
+      }
+      return setBrowserViewSetPersonVisibility(adapter, normalizedViewSetId, normalizedPersonId, Boolean(visible));
     },
 
     async saveEvent(value) {

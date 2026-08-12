@@ -119,7 +119,7 @@ export function createBrowserPlatform({
   };
 }
 
-export function createSqlitePlatform(database) {
+export function createSqlitePlatform(database, invokeCommand) {
   return {
     kind: "sqlite",
     database,
@@ -128,6 +128,12 @@ export function createSqlitePlatform(database) {
     },
     select(sql, bindValues = []) {
       return database.select(sql, bindValues);
+    },
+    saveViewSetAtomic(viewSet) {
+      if (typeof invokeCommand !== "function") {
+        throw new Error("Atomic display-set persistence is unavailable");
+      }
+      return invokeCommand("save_view_set_atomic", { viewSet });
     },
   };
 }
@@ -139,7 +145,8 @@ export async function createPlatform(options = {}) {
   }
 
   const plugin = await import("@tauri-apps/plugin-sql");
+  const { invoke } = await import("@tauri-apps/api/core");
   const Database = plugin.default ?? plugin.Database;
   const database = await Database.load(options.databaseUrl ?? "sqlite:nagi.db");
-  return createSqlitePlatform(database);
+  return createSqlitePlatform(database, invoke);
 }

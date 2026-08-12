@@ -115,7 +115,7 @@
             <button class="active" type="button" role="tab" aria-selected="true" data-resource-tab="people">メンバー <span>4</span></button>
             <button type="button" role="tab" aria-selected="false" data-resource-tab="rooms">会議室 <span>1</span></button>
           </div>
-          <div class="resource-list" id="people-resource-list">
+          <div class="resource-list" id="people-resource-list" aria-label="カレンダーに表示するメンバー">
             <button class="resource-person" type="button" data-person="me"><span class="avatar avatar-navy">加</span><span><strong>加藤 浩</strong><small>自分の予定</small></span><i class="presence online"></i></button>
             <button class="resource-person" type="button" data-person="sato"><span class="avatar avatar-blue">佐</span><span><strong>佐藤 美咲</strong><small>プロダクト企画</small></span><i class="presence busy"></i></button>
             <button class="resource-person" type="button" data-person="suzuki"><span class="avatar avatar-gold">鈴</span><span><strong>鈴木 健太</strong><small>UXデザイン</small></span><i class="presence online"></i></button>
@@ -172,7 +172,7 @@
         </section>
 
         <div class="selection-bar">
-          <div class="selection-summary">
+          <div class="selection-summary" aria-live="polite">
             <span class="stacked-avatars"><i class="avatar avatar-navy">加</i><i class="avatar avatar-blue">佐</i><i class="avatar avatar-gold">鈴</i><i class="avatar avatar-green">陳</i></span>
             <span><strong id="selection-title">プロダクト定例</strong>を表示中</span>
             <span class="room-pill"><svg><use href="#i-room"/></svg> HIKARI 12F</span>

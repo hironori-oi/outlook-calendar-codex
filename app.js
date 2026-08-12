@@ -1,6 +1,15 @@
 import { createAppRepository } from "./src/services/app-repository.js";
 import { createId } from "./src/domain/ids.js";
 import { installWindowControls, isTauriRuntime } from "./src/services/platform.js";
+import {
+  dayResourcesForSpace,
+  eventMatchesDayResource,
+  eventVisibleInViewSet,
+  hiddenPersonIds,
+  lensModeForSpace,
+  visiblePersonIds,
+} from "./src/domain/calendar-view.js";
+import { withDemoEventResources } from "./src/data/demo-event-resources.js";
 
 const CITY_BACKGROUND_URL = new URL("./assets/nagi-city-morning.png", import.meta.url).href;
 
@@ -61,6 +70,7 @@ let directorySearchTimer;
 let settingsSaveTimer;
 let appearanceState = {};
 let composerSaveInFlight = false;
+const memberVisibilityPending = new Set();
 
 const people = {
   me: { id: "me", name: "加藤 浩", short: "加", department: "事業推進室", role: "プロダクトオーナー", location: "東京本社", mail: "hiro.kato@example.jp", color: "navy", presence: "online" },
@@ -127,7 +137,7 @@ let events = [
   { id: 27, space: "sales", day: 2, start: 14, duration: 1, title: "空き 6 / 8人", kind: "shared", owner: "6人が参加可能", room: "—" },
   { id: 28, space: "sales", day: 3, start: 9.5, duration: 1, title: "本部定例", kind: "mine", owner: "営業本部", room: "NAGISA 8F" },
   { id: 29, space: "sales", day: 4, start: 13, duration: 1.5, title: "予定あり × 6", kind: "busy", owner: "6人に予定があります", room: "—" },
-];
+].map(withDemoEventResources);
 
 const weekdays = ["月", "火", "水", "木", "金"];
 const baseWeekStart = initialWeekStart;
@@ -165,17 +175,16 @@ function eventOccursOn(event, date) {
   return event.status !== "draft" && sameDate(dateForEvent(event), date);
 }
 
+function hiddenPeopleForSpace(spaceId = state.activeSpace) {
+  return hiddenPersonIds(spaces[spaceId]);
+}
+
+function visiblePeopleForSpace(spaceId = state.activeSpace) {
+  return visiblePersonIds(spaces[spaceId], people);
+}
+
 function eventVisibleInSpace(event, spaceId = state.activeSpace) {
-  const space = spaces[spaceId];
-  if (!space || event.status === "draft") return false;
-  const visibleResources = new Set([...space.people, ...space.rooms]);
-  if (event.resourceIds?.length) {
-    return event.resourceIds.some((id) => visibleResources.has(id));
-  }
-  if (event.space === spaceId) return true;
-  const personMatch = space.people.some((id) => people[id] && event.owner?.includes(people[id].name));
-  const roomMatch = space.rooms.some((id) => rooms[id] && event.room === rooms[id].name);
-  return personMatch || roomMatch;
+  return eventVisibleInViewSet(event, spaces[spaceId], people, rooms);
 }
 
 function weekdayLabel(date) {
@@ -239,7 +248,7 @@ function weekColumnHTML(day) {
   return `<div class="day-column${sameDate(columnDate, new Date()) ? " today-column" : ""}" data-date="${dateKey(columnDate)}"><div class="business-hours"></div>${highlight}${dayEvents.map(eventHTML).join("")}</div>`;
 }
 
-function renderWeek() {
+function renderWeek(scrollState = null) {
   const weekDates = weekdays.map((_, index) => addDays(state.weekStart, index));
   const first = weekDates[0];
   const last = weekDates[4];
@@ -254,54 +263,47 @@ function renderWeek() {
   </div>`;
   window.requestAnimationFrame(() => {
     const scroll = ui.calendarView.querySelector(".calendar-scroll");
-    if (scroll) scroll.scrollTop = 32;
+    if (scroll) {
+      scroll.scrollTop = scrollState?.top ?? 32;
+      scroll.scrollLeft = scrollState?.left ?? 0;
+    }
   });
 }
 
-function eventMatchesResource(event, resource, resourceIndex, activeEvents, space) {
-  if (event.resourceIds?.includes(resource.id)) return true;
-  if (resource.type === "room") {
-    const room = rooms[resource.id];
-    return Boolean(room && event.room === room.name);
-  }
-  const person = people[resource.id];
-  if (!person) return false;
-  if (event.owner?.includes(person.name)) return true;
-  if (/全社|本部定例|プロダクト定例|採用定例/.test(`${event.title} ${event.owner || ""}`)) return true;
-  if (event.kind === "mine") return resource.id === "me";
-  const eventIndex = Math.max(0, activeEvents.indexOf(event));
-  const numericId = Number(event.id);
-  const firstAssigned = ((Number.isFinite(numericId) ? numericId : 0) + eventIndex) % space.people.length;
-  const secondAssigned = (firstAssigned + 1) % space.people.length;
-  if (event.kind === "busy") return space.people[firstAssigned] === resource.id;
-  return space.people[firstAssigned] === resource.id || space.people[secondAssigned] === resource.id || (event.kind === "shared" && resourceIndex === 0);
-}
-
-function renderDay() {
+function renderDay(scrollState = null) {
   ui.dateTitle.textContent = fullDateLabel(state.selectedDate);
   ui.dateTitle.nextElementSibling.textContent = `${state.selectedDate.getFullYear()}年・リソース比較`;
   const space = spaces[state.activeSpace];
-  const personLimit = space.rooms.length ? 4 : 5;
-  const resources = space.people.slice(0, personLimit).map((id) => ({ id, type: "person", label: people[id].name, sub: id === "me" ? "自分" : people[id].department.split(" / ").at(-1), color: people[id].color, short: people[id].short }));
-  if (space.rooms.length) {
-    const room = rooms[space.rooms[0]];
-    resources.push({ id: room.id, type: "room", label: room.name, sub: `${room.capacity}名・${room.equipment}`, color: "", short: "" });
+  const resources = dayResourcesForSpace(space, people, rooms);
+  if (!resources.length) {
+    ui.calendarView.innerHTML = `<div class="calendar-empty-state">
+      <span class="calendar-empty-mark">${icon("users")}</span>
+      <p>表示中のメンバーがいません</p>
+      <small>左のメンバースイッチをオンにすると、予定を比較できます。</small>
+    </div>`;
+    return;
   }
   const headings = resources.map((resource) => `<div class="resource-heading">${resource.type === "room" ? `<span class="room-icon">${icon("room")}</span>` : `<span class="avatar avatar-${avatarColor(resource.color)}">${escapeHTML(resource.short)}</span>`}<span><strong>${escapeHTML(resource.label)}</strong><small>${escapeHTML(resource.sub)}</small></span></div>`).join("");
   const activeDateEvents = events.filter((event) => eventVisibleInSpace(event) && eventOccursOn(event, state.selectedDate));
-  const columns = resources.map((resource, resourceIndex) => {
-    const sourceEvents = activeDateEvents.filter((event) => eventMatchesResource(event, resource, resourceIndex, activeDateEvents, space));
+  const columns = resources.map((resource) => {
+    const sourceEvents = activeDateEvents.filter((event) => eventMatchesDayResource(event, resource, people, rooms));
     const resourceEvents = sourceEvents.map((event) => ({ ...event, dateKey: dateKey(state.selectedDate) }));
     const highlight = state.highlight && state.highlight.dateKey === dateKey(state.selectedDate)
       ? `<div class="slot-highlight" style="top:${(state.highlight.start - 8) * 64 + 2}px;height:${state.highlight.duration * 64 - 4}px"></div>`
       : "";
     return `<div class="day-column" data-date="${dateKey(state.selectedDate)}" data-resource="${escapeHTML(resource.id)}"><div class="business-hours"></div>${highlight}${resourceEvents.map(eventHTML).join("")}</div>`;
   }).join("");
-  const columnsStyle = `grid-template-columns:52px repeat(${resources.length},minmax(120px,1fr))`;
-  ui.calendarView.innerHTML = `<div class="day-view"><div class="resource-day-header" style="${columnsStyle}"><div class="tz-cell">JST</div>${headings}</div><div class="calendar-scroll"><div class="timeline-grid" style="${columnsStyle}">${timeGutterHTML()}${columns}</div></div></div>`;
+  const columnsStyle = `grid-template-columns:52px repeat(${resources.length},minmax(135px,1fr))`;
+  const columnsMinWidth = Math.max(640, 52 + resources.length * 135);
+  ui.calendarView.innerHTML = `<div class="day-view"><div class="resource-day-header" style="${columnsStyle};min-width:${columnsMinWidth}px"><div class="tz-cell">JST</div>${headings}</div><div class="calendar-scroll" style="min-width:${columnsMinWidth}px"><div class="timeline-grid" style="${columnsStyle};min-width:${columnsMinWidth}px">${timeGutterHTML()}${columns}</div></div></div>`;
   window.requestAnimationFrame(() => {
     const scroll = ui.calendarView.querySelector(".calendar-scroll");
-    if (scroll) scroll.scrollTop = 32;
+    const horizontalScroll = ui.calendarView.querySelector(".day-view");
+    if (scroll) {
+      scroll.scrollTop = scrollState?.top ?? 32;
+      scroll.scrollLeft = scrollState?.left ?? 0;
+    }
+    if (horizontalScroll) horizontalScroll.scrollLeft = scrollState?.horizontalLeft ?? 0;
   });
 }
 
@@ -333,19 +335,39 @@ function renderMonth() {
   ui.calendarView.innerHTML = `<div class="month-view"><div class="month-weekdays">${weekdayHeader}</div><div class="month-grid">${cells}</div></div>`;
 }
 
-function renderCalendar() {
+function captureCalendarScroll() {
+  const scroll = ui.calendarView.querySelector(".calendar-scroll");
+  const horizontalScroll = ui.calendarView.querySelector(".day-view");
+  return {
+    top: scroll?.scrollTop || 0,
+    left: scroll?.scrollLeft || 0,
+    horizontalLeft: horizontalScroll?.scrollLeft || 0,
+  };
+}
+
+function renderCalendar(scrollState = null) {
   document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === state.view));
-  if (state.view === "day") renderDay();
+  if (state.view === "day") renderDay(scrollState);
   else if (state.view === "month") renderMonth();
-  else renderWeek();
+  else renderWeek(scrollState);
 }
 
 function renderResources() {
   const space = spaces[state.activeSpace];
+  const visiblePeople = visiblePeopleForSpace();
+  const visiblePeopleSet = new Set(visiblePeople);
+  const lensMode = lensModeForSpace(space, people);
   renderSpaceList();
   ui.peopleResourceList.innerHTML = space.people.map((id) => {
     const person = people[id];
-    return `<button class="resource-person" type="button" data-person="${escapeHTML(id)}"><span class="avatar avatar-${avatarColor(person.color)}">${escapeHTML(person.short)}</span><span><strong>${escapeHTML(person.name)}</strong><small>${id === "me" ? "自分の予定" : escapeHTML(person.department.split(" / ").at(-1))}</small></span><i class="presence ${presenceClass(person.presence)}"></i></button>`;
+    if (!person) return "";
+    const visible = visiblePeopleSet.has(id);
+    const pending = memberVisibilityPending.has(`${state.activeSpace}:${id}`);
+    return `<button class="resource-person${visible ? "" : " is-hidden"}${pending ? " is-saving" : ""}" type="button" role="switch" aria-checked="${visible}" aria-disabled="${pending}" aria-label="${escapeHTML(person.name)}のカレンダー表示" title="${escapeHTML(person.name)}をカレンダーで${visible ? "非表示にする" : "表示する"}" data-person="${escapeHTML(id)}" data-member-visibility="${escapeHTML(id)}">
+      <span class="avatar-wrap"><span class="avatar avatar-${avatarColor(person.color)}">${escapeHTML(person.short)}</span><i class="presence ${presenceClass(person.presence)}" aria-hidden="true"></i></span>
+      <span class="resource-copy"><strong>${escapeHTML(person.name)}</strong><small>${id === "me" ? "自分の予定" : escapeHTML(person.department.split(" / ").at(-1))}</small></span>
+      <span class="member-switch" aria-hidden="true"><i></i></span>
+    </button>`;
   }).join("");
   ui.roomResourceList.innerHTML = space.rooms.length
     ? space.rooms.map((id) => {
@@ -354,15 +376,20 @@ function renderResources() {
       }).join("") + `<button class="add-resource" type="button" data-open-directory="rooms">${icon("plus")} 会議室を追加</button>`
     : `<button class="add-resource" type="button" data-open-directory="rooms">${icon("plus")} 会議室を追加</button>`;
   const tabButtons = document.querySelectorAll("[data-resource-tab]");
-  tabButtons[0].querySelector("span").textContent = space.people.length;
+  tabButtons[0].querySelector("span").textContent = `${visiblePeople.length}/${space.people.length}`;
   tabButtons[1].querySelector("span").textContent = space.rooms.length;
   ui.selectionTitle.textContent = space.name;
-  ui.lensTitle.textContent = space.lens;
+  ui.lensTitle.textContent = lensMode === "current"
+    ? space.lens
+    : lensMode === "saved"
+      ? `${space.people.length}人全員を基準にした候補`
+      : "表示するメンバーを選択";
   renderLensSlots();
-  const avatars = space.people.slice(0, 5).map((id) => `<i class="avatar avatar-${avatarColor(people[id].color)}">${escapeHTML(people[id].short)}</i>`).join("");
-  const extra = space.people.length > 5 ? `<i class="avatar avatar-navy">+${space.people.length - 5}</i>` : "";
+  document.querySelector(".lens-more").hidden = lensMode !== "current";
+  const avatars = visiblePeople.slice(0, 5).map((id) => `<i class="avatar avatar-${avatarColor(people[id].color)}">${escapeHTML(people[id].short)}</i>`).join("");
+  const extra = visiblePeople.length > 5 ? `<i class="avatar avatar-navy">+${visiblePeople.length - 5}</i>` : "";
   const roomPill = space.rooms.length ? `<span class="room-pill">${icon("room")} ${escapeHTML(rooms[space.rooms[0]].name)}${space.rooms.length > 1 ? ` +${space.rooms.length - 1}` : ""}</span>` : "";
-  ui.selectionSummary.innerHTML = `<span class="stacked-avatars">${avatars}${extra}</span><span><strong id="selection-title">${escapeHTML(space.name)}</strong>を表示中</span>${roomPill}`;
+  ui.selectionSummary.innerHTML = `<span class="stacked-avatars" aria-hidden="true">${avatars}${extra}</span><span><strong id="selection-title">${escapeHTML(space.name)}</strong> · ${visiblePeople.length}/${space.people.length}人を表示中</span>${roomPill}`;
   ui.selectionTitle = document.querySelector("#selection-title");
   renderComposerContext();
 }
@@ -381,7 +408,17 @@ function renderSpaceList() {
 
 function renderLensSlots() {
   const space = spaces[state.activeSpace];
-  document.querySelector("#lens-slots").innerHTML = space.slots.map((slot) => `<button${slot.recommended ? ' class="recommended"' : ""} type="button" data-slot-day="${slot.day}" data-slot-start="${slot.start}" data-slot-duration="${slot.duration}"><span>${weekdayLabel(addDays(state.weekStart, slot.day))}</span><strong>${timeLabel(slot.start)}–${timeLabel(slot.start + slot.duration)}</strong><small>${escapeHTML(slot.label)}</small></button>`).join("");
+  const lensSlots = document.querySelector("#lens-slots");
+  const lensMode = lensModeForSpace(space, people);
+  if (lensMode === "empty") {
+    lensSlots.innerHTML = `<p class="lens-empty">メンバーをオンにすると候補を表示します</p>`;
+    return;
+  }
+  if (lensMode === "saved") {
+    lensSlots.innerHTML = `<p class="lens-empty">${space.people.length}人全員を基準にした保存済み候補です。全員をオンにすると表示します</p>`;
+    return;
+  }
+  lensSlots.innerHTML = space.slots.map((slot) => `<button${slot.recommended ? ' class="recommended"' : ""} type="button" data-slot-day="${slot.day}" data-slot-start="${slot.start}" data-slot-duration="${slot.duration}"><span>${weekdayLabel(addDays(state.weekStart, slot.day))}</span><strong>${timeLabel(slot.start)}–${timeLabel(slot.start + slot.duration)}</strong><small>${escapeHTML(slot.label)}</small></button>`).join("");
 }
 
 function renderComposerContext() {
@@ -416,7 +453,47 @@ function switchSpace(spaceId) {
   document.querySelectorAll(".space-row").forEach((row) => row.classList.toggle("active", row.dataset.space === spaceId));
   renderResources();
   renderCalendar();
-  showToast("表示セットを切り替えました", `${spaces[spaceId].name} · ${spaces[spaceId].people.length}人`);
+  showToast("表示セットを切り替えました", `${spaces[spaceId].name} · ${visiblePeopleForSpace(spaceId).length}/${spaces[spaceId].people.length}人を表示`);
+}
+
+function renderResourcesPreservingMemberFocus() {
+  const focusedToggle = document.activeElement?.closest?.("[data-member-visibility]");
+  const focusedPersonId = focusedToggle && ui.peopleResourceList.contains(focusedToggle)
+    ? focusedToggle.dataset.memberVisibility
+    : null;
+  const focusedSpaceId = state.activeSpace;
+  renderResources();
+  if (!focusedPersonId || state.activeSpace !== focusedSpaceId) return;
+  document.querySelector(`[data-member-visibility="${CSS.escape(focusedPersonId)}"]`)?.focus({ preventScroll: true });
+}
+
+async function toggleMemberVisibility(personId) {
+  const spaceId = state.activeSpace;
+  const space = spaces[spaceId];
+  const pendingKey = `${spaceId}:${personId}`;
+  if (!space?.people.includes(personId) || memberVisibilityPending.has(pendingKey)) return;
+  const hiddenPeople = hiddenPeopleForSpace(spaceId);
+  const wasHidden = hiddenPeople.has(personId);
+  if (wasHidden) hiddenPeople.delete(personId);
+  else hiddenPeople.add(personId);
+  space.hiddenPeople = space.people.filter((id) => hiddenPeople.has(id));
+  memberVisibilityPending.add(pendingKey);
+  const calendarScroll = captureCalendarScroll();
+  renderResourcesPreservingMemberFocus();
+  renderCalendar(calendarScroll);
+  try {
+    await appRepository.setViewSetPersonVisibility(spaceId, personId, wasHidden);
+  } catch (error) {
+    const currentHidden = hiddenPeopleForSpace(spaceId);
+    if (wasHidden) currentHidden.add(personId);
+    else currentHidden.delete(personId);
+    space.hiddenPeople = space.people.filter((id) => currentHidden.has(id));
+    showToast("表示状態を保存できませんでした", error.message || "もう一度お試しください");
+    if (state.activeSpace === spaceId) renderCalendar(captureCalendarScroll());
+  } finally {
+    memberVisibilityPending.delete(pendingKey);
+    if (state.activeSpace === spaceId) renderResourcesPreservingMemberFocus();
+  }
 }
 
 function openDirectory(mode = "people", context = "viewSet") {
@@ -460,9 +537,11 @@ async function applyDirectorySelection() {
     showToast("予定の参加者を更新しました", `${state.composerSelection.people.size}人・${state.composerSelection.rooms.size}部屋`);
     return;
   }
+  const nextPeople = ["me", ...state.pendingSelection.people].filter((id, index, list) => people[id] && list.indexOf(id) === index);
   const nextSpace = {
     ...space,
-    people: ["me", ...state.pendingSelection.people].filter((id, index, list) => people[id] && list.indexOf(id) === index),
+    people: nextPeople,
+    hiddenPeople: (space.hiddenPeople || []).filter((id) => nextPeople.includes(id)),
     rooms: [...state.pendingSelection.rooms].filter((id) => rooms[id]),
   };
   await appRepository?.saveViewSet({ id: state.activeSpace, ...nextSpace });
@@ -751,6 +830,7 @@ async function createDisplaySet(name) {
   const nextSpace = {
     name,
     people: [...source.people],
+    hiddenPeople: [...(source.hiddenPeople || [])],
     rooms: [...source.rooms],
     lens: source.lens,
     availability: source.availability,
@@ -893,6 +973,14 @@ document.addEventListener("click", (event) => {
   const directoryItem = target.closest("[data-directory-id]");
   if (directoryItem) {
     toggleDirectoryItem(directoryItem.dataset.directoryId);
+    return;
+  }
+
+  const memberVisibility = target.closest("[data-member-visibility]");
+  if (memberVisibility) {
+    if (memberVisibility.getAttribute("aria-disabled") !== "true") {
+      void toggleMemberVisibility(memberVisibility.dataset.memberVisibility);
+    }
     return;
   }
 

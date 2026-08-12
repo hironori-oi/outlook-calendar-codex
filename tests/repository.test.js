@@ -87,6 +87,7 @@ test("initialize upserts fixtures and loadSnapshot preserves the app.js field sh
   assert.ok(Array.isArray(snapshot.rooms));
   assert.equal(snapshot.people.find((person) => person.id === "sato").name, "佐藤 美咲");
   assert.deepEqual(snapshot.spaces.product.people, ["sato", "suzuki"]);
+  assert.deepEqual(snapshot.spaces.product.hiddenPeople, []);
   assert.equal(snapshot.events[0].space, "product");
   assert.equal(snapshot.events[0].dateKey, "2026-08-11");
   assert.equal(snapshot.events[0].start, 9.5);
@@ -151,7 +152,7 @@ test("SQLite snapshots load only people referenced by a display set or event whi
     async select(sql, params = []) {
       selects.push({ sql, params });
       if (sql.includes("FROM view_set_people")) {
-        return [{ viewSetId: "product", personId: "selected-person" }];
+        return [{ viewSetId: "product", personId: "selected-person", isVisible: 0 }];
       }
       if (sql.includes("FROM view_set_rooms")) return [];
       if (sql.includes("FROM view_sets")) {
@@ -228,6 +229,7 @@ test("SQLite snapshots load only people referenced by a display set or event whi
   const snapshot = await repo.loadSnapshot();
 
   assert.deepEqual(snapshot.people.map((person) => person.id), ["selected-person", "event-only-person"]);
+  assert.deepEqual(snapshot.spaces.product.hiddenPeople, ["selected-person"]);
   assert.equal(snapshot.sync.count, 30000);
   assert.equal(
     selects.some(({ sql }) => /FROM people\s+ORDER BY display_name/.test(sql)),
@@ -249,6 +251,7 @@ test("saved view sets, normalized events, and settings survive a repository rest
     people: ["sato"],
     rooms: ["hikari"],
   });
+  await repo.setViewSetPersonVisibility("custom", "sato", false);
   const savedEvent = await repo.saveEvent({
     space: "custom",
     dateKey: "2026-08-12",
@@ -276,6 +279,7 @@ test("saved view sets, normalized events, and settings survive a repository rest
   assert.equal(snapshot.spaces.product.name, "変更済みプロダクト");
   assert.deepEqual(snapshot.spaces.product.people, ["sato"]);
   assert.equal(snapshot.spaces.custom.name, "自分の表示");
+  assert.deepEqual(snapshot.spaces.custom.hiddenPeople, ["sato"]);
   const restoredEvent = snapshot.events.find((event) => event.id === savedEvent.id);
   assert.equal(restoredEvent.title, "ローカル下書き");
   assert.equal(restoredEvent.notes, "再起動後も残すメモ");
@@ -283,8 +287,112 @@ test("saved view sets, normalized events, and settings survive a repository rest
   assert.equal(restoredEvent.transactionId, "transaction-test-1");
   assert.deepEqual(snapshot.settings.appearance, { preset: "focus", panel: 2 });
 
+  await restarted.setViewSetPersonVisibility("custom", "sato", true);
+  const visibleAgain = await restarted.loadSnapshot();
+  assert.deepEqual(visibleAgain.spaces.custom.hiddenPeople, []);
+
   // Keep the original adapter referenced so this test also covers serialized cross-instance state.
   assert.equal(platform.kind, "browser");
+});
+
+test("SQLite member visibility updates only the requested display-set membership", async () => {
+  const executions = [];
+  const platform = {
+    kind: "sqlite",
+    async execute(sql, params = []) {
+      executions.push({ sql, params });
+      return { rowsAffected: 1 };
+    },
+    async select(sql) {
+      if (sql.includes("COUNT(*) AS count FROM people")) return [{ count: 0 }];
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+  };
+  const repo = createAppRepository({}, { platform });
+
+  const result = await repo.setViewSetPersonVisibility("product", "sato", false);
+
+  const update = executions.find(({ sql }) => sql.includes("UPDATE view_set_people"));
+  assert.deepEqual(update.params, [0, "product", "sato"]);
+  assert.deepEqual(result, { viewSetId: "product", personId: "sato", visible: false });
+});
+
+test("SQLite view-set saves delegate the complete replacement to one atomic platform call", async () => {
+  const savedPayloads = [];
+  const executions = [];
+  const platform = {
+    kind: "sqlite",
+    async execute(sql, params = []) {
+      executions.push({ sql, params });
+      return { rowsAffected: 1 };
+    },
+    async select(sql) {
+      if (sql.includes("COUNT(*) AS count FROM people")) return [{ count: 0 }];
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+    async saveViewSetAtomic(payload) {
+      savedPayloads.push(payload);
+    },
+  };
+  const repo = createAppRepository({}, { platform });
+
+  await repo.saveViewSet({
+    id: "product",
+    name: "プロダクト定例",
+    people: ["sato", "suzuki"],
+    hiddenPeople: ["suzuki"],
+    rooms: ["hikari"],
+    lens: "全員と部屋が空く時間",
+    availability: "all",
+    slots: [{ start: "10:00", end: "10:30" }],
+    accent: "cobalt",
+  });
+
+  assert.deepEqual(savedPayloads, [{
+    id: "product",
+    name: "プロダクト定例",
+    lens: "全員と部屋が空く時間",
+    availability: "all",
+    accent: "cobalt",
+    slotsJson: '[{"start":"10:00","end":"10:30"}]',
+    people: [
+      { id: "sato", visible: true },
+      { id: "suzuki", visible: false },
+    ],
+    rooms: ["hikari"],
+  }]);
+  assert.equal(
+    executions.some(({ sql }) => /(?:DELETE FROM|INSERT INTO) view_set_(?:people|rooms)/.test(sql)),
+    false,
+  );
+});
+
+test("SQLite view-set save failures never fall back to destructive sequential writes", async () => {
+  const executions = [];
+  const platform = {
+    kind: "sqlite",
+    async execute(sql, params = []) {
+      executions.push({ sql, params });
+      return { rowsAffected: 1 };
+    },
+    async select(sql) {
+      if (sql.includes("COUNT(*) AS count FROM people")) return [{ count: 0 }];
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+    async saveViewSetAtomic() {
+      throw new Error("simulated transaction failure");
+    },
+  };
+  const repo = createAppRepository({}, { platform });
+
+  await assert.rejects(
+    repo.saveViewSet({ id: "product", name: "変更失敗", people: ["sato"], rooms: [] }),
+    /simulated transaction failure/,
+  );
+  assert.equal(
+    executions.some(({ sql }) => /(?:DELETE FROM|INSERT INTO) view_set_(?:people|rooms)/.test(sql)),
+    false,
+  );
 });
 
 test("demo directory sync updates metadata without mutating the directory snapshot", async () => {
